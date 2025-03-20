@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台灣 PM2.5 資料整理</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- DataTables CSS -->
+    <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="container py-4">
+        <!-- 頁首 -->
+        <style>
+            .gradient-text {
+                background: linear-gradient(45deg, #0066ff, #9933ff);
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+                font-weight: bold;
+            }
+        </style>
+        <header class="text-center mb-5">
+            <h1 class="display-4 gradient-text">台灣 PM2.5 即時資料</h1>
+            <h2 class="h4 text-muted">空氣品質監測站數據整理</h2>
+        </header>
+
+        <!-- 圖表區域 -->
+        <section class="mb-5">
+            <div class="card">
+                <div class="card-body">
+                    <h3 class="h5 mb-3">各縣市 PM2.5 平均值</h3>
+                    <canvas id="pmChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <main>
+            <section class="mb-5">
+                <h3 class="h5 mb-3">關於 PM2.5</h3>
+                <p class="lead">PM2.5 是指懸浮在空氣中的微粒，直徑小於或等於 2.5 微米的粒子。這些微粒對人體健康有重大影響。</p>
+            </section>
+
+            <section class="mb-5">
+                <h3 class="h5 mb-3">監測數據</h3>
+                <div class="table-responsive">
+                    <table id="pm25Table" class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>縣市</th>
+                                <th>測站名稱</th>
+                                <th>PM2.5 數值</th>
+                                <th>更新時間</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in record_list %}
+                            <tr>
+                                <td>{{ record.county }}</td>
+                                <td>{{ record.site }}</td>
+                                <td>
+                                    {% if record.pm25 == "" %}
+                                    <span class="text-muted">無資料</span>
+                                    {% else %}
+                                    {% set pm25_value = record.pm25|float|int %}
+                                    <span class="badge {% if pm25_value <= 10 %}bg-success
+                                            {% elif pm25_value <= 20 %}bg-warning
+                                            {% else %}bg-danger{% endif %}">
+                                        {{ pm25_value }}
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ record.datacreationdate }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="mb-5">
+                <h3 class="h5 mb-3">空氣品質指標說明</h3>
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                良好
+                                <span class="badge bg-success">10以下</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                普通
+                                <span class="badge bg-warning">11-20</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                不健康
+                                <span class="badge bg-danger">20以上</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="text-center text-muted">
+            <p>資料來源：行政院環境保護署</p>
+        </footer>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
+    <!-- Chart 初始化 -->
+    <script>
+        // 將 Flask 傳來的資料轉換成 JavaScript 變數
+        const recordList = {{ record_list| tojson | safe }};
+
+        // 初始化 DataTable
+        $(document).ready(function () {
+            // 自定義排序函數：中文筆劃排序
+            $.fn.dataTable.ext.type.order['chinese-first-char'] = function(data) {
+                // 取得第一個字
+                const firstChar = data.charAt(0);
+                // 使用 Unicode 編碼作為排序依據
+                return firstChar.charCodeAt(0);
+            };
+
+            $('#pm25Table').DataTable({
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.7/i18n/zh-HANT.json'
+                },
+                pageLength: 10,
+                order: [[0, 'asc']],  // 預設按縣市排序
+                responsive: true,
+                columnDefs: [
+                    {
+                        targets: 0, // 縣市欄位
+                        type: 'chinese-first-char'
+                    },
+                    {
+                        targets: 1, // 測站名稱欄位
+                        type: 'chinese-first-char'
+                    },
+                    {
+                        targets: 2, // PM2.5 數值欄位
+                        type: 'num',
+                        render: function(data, type, row) {
+                            if (type === 'sort') {
+                                // 提取數字部分用於排序
+                                const num = parseInt(data.replace(/[^\d]/g, ''));
+                                return isNaN(num) ? 0 : num;
+                            }
+                            return data;
+                        }
+                    }
+                ]
+            });
+        });
+
+        // 處理資料：計算各縣市平均值
+        const countyData = {};
+        recordList.forEach(record => {
+            if (record.pm25 !== "") {
+                if (!countyData[record.county]) {
+                    countyData[record.county] = {
+                        sum: 0,
+                        count: 0
+                    };
+                }
+                countyData[record.county].sum += parseFloat(record.pm25);
+                countyData[record.county].count += 1;
+            }
+        });
+
+        // 計算平均值並整理資料
+        const counties = [];
+        const averages = [];
+        for (const county in countyData) {
+            counties.push(county);
+            const avg = countyData[county].sum / countyData[county].count;
+            averages.push(avg.toFixed(1));
+        }
+
+        // 建立圖表
+        const ctx = document.getElementById('pmChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: counties,
+                datasets: [{
+                    label: '平均 PM2.5 值',
+                    data: averages,
+                    backgroundColor: averages.map(value => {
+                        if (value <= 10) return '#198754';  // success
+                        if (value <= 20) return '#ffc107';  // warning
+                        return '#dc3545';  // danger
+                    }),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: '各縣市 PM2.5 平均值'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'PM2.5'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
